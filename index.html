@@ -959,9 +959,11 @@ function bindDragEvents() {
       pointerStartX = e.clientX;
       pointerStartY = e.clientY;
       const targetCard = card;
+      const pointerId = e.pointerId;
 
       longPressTimer = setTimeout(() => {
         startDrag(targetCard, pointerStartY);
+        try { handle.setPointerCapture(pointerId); } catch (err) {}
       }, e.pointerType === 'mouse' ? 0 : LONG_PRESS_MS);
     });
 
@@ -983,13 +985,15 @@ function bindDragEvents() {
     handle.addEventListener('pointerup', e => {
       clearTimeout(longPressTimer);
       if (dragState && dragState.card === card) {
+        try { handle.releasePointerCapture(e.pointerId); } catch (err) {}
         endDrag();
       }
     });
 
-    handle.addEventListener('pointercancel', () => {
+    handle.addEventListener('pointercancel', e => {
       clearTimeout(longPressTimer);
       if (dragState && dragState.card === card) {
+        try { handle.releasePointerCapture(e.pointerId); } catch (err) {}
         const c = dragState.card;
         c.classList.remove('touch-lifted');
         c.style.transform = '';
