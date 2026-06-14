@@ -170,24 +170,11 @@
     gap: 14px;
     align-items: flex-start;
     position: relative;
-    transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
-    touch-action: pan-y;
+    transition: box-shadow 0.2s ease;
   }
 
-  .book-card.dragging {
-    opacity: 0.5;
-  }
-
-  .book-card.drag-active {
-    box-shadow: 0 16px 40px var(--shadow-color);
-    transform: scale(1.02);
-    z-index: 10;
-  }
-
-  .drag-placeholder {
-    border-radius: var(--radius-lg);
-    border: 1.5px dashed var(--glass-border);
-    background: transparent;
+  .book-card.touch-lifted {
+    box-shadow: 0 20px 48px var(--shadow-color);
   }
 
   .drag-handle {
@@ -201,6 +188,9 @@
     color: var(--text-tertiary);
     align-self: stretch;
     touch-action: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    user-select: none;
   }
 
   .drag-handle:active {
@@ -710,7 +700,7 @@ function bookCardHTML(b) {
     : placeholderSVG;
 
   return `
-    <div class="glass-card book-card" data-id="${b.id}" draggable="true">
+    <div class="glass-card book-card" data-id="${b.id}">
       <div class="drag-handle" aria-label="拖曳排序">
         <svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.2"/><circle cx="15" cy="6" r="1.2"/><circle cx="9" cy="12" r="1.2"/><circle cx="15" cy="12" r="1.2"/><circle cx="9" cy="18" r="1.2"/><circle cx="15" cy="18" r="1.2"/></svg>
       </div>
@@ -835,111 +825,183 @@ function readImageAsDataURL(file, callback) {
   reader.readAsDataURL(file);
 }
 
-// ---- Drag to reorder ----
-let dragSrcId = null;
-let touchDragEl = null;
-let touchDragGhostY = 0;
+// ---- Drag to reorder: free vertical drag, snap to nearest slot ----
+let pointerStartX = 0;
+let pointerStartY = 0;
 let longPressTimer = null;
-const LONG_PRESS_MS = 350;
+const LONG_PRESS_MS = 280;
+const MOVE_CANCEL_THRESHOLD = 10;
 
-function reorderBooks(srcId, targetId) {
-  if (srcId === targetId) return;
-  const srcIndex = books.findIndex(b => b.id === srcId);
-  const targetIndex = books.findIndex(b => b.id === targetId);
-  if (srcIndex === -1 || targetIndex === -1) return;
-  const [moved] = books.splice(srcIndex, 1);
-  books.splice(targetIndex, 0, moved);
-  saveBooks();
-  render();
+let dragState = null; // { id, card, startTop, pointerOffsetY, originIndex, cardHeight, gap }
+
+function getCardMetrics() {
+  const cards = Array.from(document.querySelectorAll('.book-card'));
+  if (cards.length < 2) return { cardHeight: 0, gap: 16 };
+  const r0 = cards[0].getBoundingClientRect();
+  const r1 = cards[1].getBoundingClientRect();
+  const gap = r1.top - r0.bottom;
+  return { cardHeight: r0.height, gap: gap > 0 ? gap : 16 };
+}
+
+function startDrag(card, pointerY) {
+  const id = card.dataset.id;
+  const rect = card.getBoundingClientRect();
+  const { cardHeight, gap } = getCardMetrics();
+
+  dragState = {
+    id,
+    card,
+    pointerOffsetY: pointerY - rect.top,
+    originIndex: books.findIndex(b => b.id === id),
+    cardHeight,
+    step: cardHeight + gap,
+    startTop: rect.top
+  };
+
+  card.classList.add('touch-lifted');
+  card.style.position = 'relative';
+  card.style.zIndex = '20';
+  card.style.transition = 'none';
+  if (navigator.vibrate) navigator.vibrate(10);
+}
+
+function updateDrag(pointerY) {
+  if (!dragState) return;
+  const newTop = pointerY - dragState.pointerOffsetY;
+  const deltaY = newTop - dragState.startTop;
+  dragState.card.style.transform = `translateY(${deltaY}px) scale(1.03)`;
+
+  // Determine target index based on current center position
+  const center = newTop + dragState.cardHeight / 2;
+  const otherCards = Array.from(document.querySelectorAll('.book-card')).filter(c => c !== dragState.card);
+
+  let targetIndex = 0;
+  for (let i = 0; i < otherCards.length; i++) {
+    const r = otherCards[i].getBoundingClientRect();
+    const cardCenter = r.top + r.height / 2;
+    if (center > cardCenter) {
+      targetIndex = i + 1;
+    } else {
+      break;
+    }
+  }
+  targetIndex = Math.max(0, Math.min(targetIndex, books.length - 1));
+
+  if (targetIndex !== dragState.currentTargetIndex) {
+    dragState.currentTargetIndex = targetIndex;
+    applyPlaceholderShift(targetIndex);
+  }
+}
+
+function applyPlaceholderShift(targetIndex) {
+  const cards = Array.from(document.querySelectorAll('.book-card'));
+  cards.forEach(c => {
+    if (c === dragState.card) return;
+    const idx = books.findIndex(b => b.id === c.dataset.id);
+    let shift = 0;
+    if (dragState.originIndex < targetIndex) {
+      if (idx > dragState.originIndex && idx <= targetIndex) shift = -dragState.step;
+    } else if (dragState.originIndex > targetIndex) {
+      if (idx >= targetIndex && idx < dragState.originIndex) shift = dragState.step;
+    }
+    c.style.transition = 'transform 0.22s cubic-bezier(0.25, 0.8, 0.25, 1)';
+    c.style.transform = shift ? `translateY(${shift}px)` : '';
+  });
+}
+
+function endDrag() {
+  if (!dragState) return;
+  const { card, id, originIndex } = dragState;
+  const targetIndex = dragState.currentTargetIndex !== undefined ? dragState.currentTargetIndex : originIndex;
+
+  // Snap animation to final slot position
+  const finalDelta = (targetIndex - originIndex) * dragState.step;
+  card.style.transition = 'transform 0.22s cubic-bezier(0.25, 0.8, 0.25, 1)';
+  card.style.transform = `translateY(${finalDelta}px)`;
+  card.classList.remove('touch-lifted');
+
+  const cleanup = () => {
+    card.style.transition = '';
+    card.style.transform = '';
+    card.style.position = '';
+    card.style.zIndex = '';
+    document.querySelectorAll('.book-card').forEach(c => {
+      c.style.transition = '';
+      c.style.transform = '';
+    });
+
+    if (targetIndex !== originIndex) {
+      const [moved] = books.splice(originIndex, 1);
+      books.splice(targetIndex, 0, moved);
+      saveBooks();
+    }
+    render();
+  };
+
+  card.addEventListener('transitionend', function handler(e) {
+    if (e.propertyName !== 'transform') return;
+    card.removeEventListener('transitionend', handler);
+    cleanup();
+  });
+
+  dragState = null;
 }
 
 function bindDragEvents() {
   const cards = document.querySelectorAll('.book-card');
 
   cards.forEach(card => {
-    const id = card.dataset.id;
-
-    // Desktop HTML5 drag (initiated from handle)
-    card.addEventListener('dragstart', e => {
-      dragSrcId = id;
-      card.classList.add('dragging');
-      e.dataTransfer.effectAllowed = 'move';
-    });
-
-    card.addEventListener('dragend', () => {
-      card.classList.remove('dragging');
-      document.querySelectorAll('.book-card').forEach(c => c.classList.remove('drag-active'));
-      dragSrcId = null;
-    });
-
-    card.addEventListener('dragover', e => {
-      e.preventDefault();
-      if (dragSrcId && dragSrcId !== id) {
-        card.classList.add('drag-active');
-      }
-    });
-
-    card.addEventListener('dragleave', () => {
-      card.classList.remove('drag-active');
-    });
-
-    card.addEventListener('drop', e => {
-      e.preventDefault();
-      card.classList.remove('drag-active');
-      if (dragSrcId) {
-        reorderBooks(dragSrcId, id);
-      }
-    });
-
-    // Mobile/touch long-press drag (initiated from handle)
     const handle = card.querySelector('.drag-handle');
-    if (handle) {
-      handle.addEventListener('touchstart', e => {
-        const targetCard = card;
-        longPressTimer = setTimeout(() => {
-          touchDragEl = targetCard;
-          targetCard.classList.add('drag-active');
-          if (navigator.vibrate) navigator.vibrate(10);
-        }, LONG_PRESS_MS);
-      }, { passive: true });
+    if (!handle) return;
 
-      handle.addEventListener('touchmove', e => {
-        if (!touchDragEl) {
-          clearTimeout(longPressTimer);
-          return;
+    handle.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      pointerStartX = e.clientX;
+      pointerStartY = e.clientY;
+      const targetCard = card;
+
+      longPressTimer = setTimeout(() => {
+        startDrag(targetCard, pointerStartY);
+      }, e.pointerType === 'mouse' ? 0 : LONG_PRESS_MS);
+    });
+
+    handle.addEventListener('pointermove', e => {
+      if (!dragState || dragState.card !== card) {
+        if (!dragState) {
+          const dx = Math.abs(e.clientX - pointerStartX);
+          const dy = Math.abs(e.clientY - pointerStartY);
+          if (dx > MOVE_CANCEL_THRESHOLD || dy > MOVE_CANCEL_THRESHOLD) {
+            clearTimeout(longPressTimer);
+          }
         }
-        e.preventDefault();
-        const touch = e.touches[0];
-        const elUnder = document.elementFromPoint(touch.clientX, touch.clientY);
-        const targetCard = elUnder ? elUnder.closest('.book-card') : null;
-        document.querySelectorAll('.book-card').forEach(c => {
-          if (c !== touchDragEl) c.classList.remove('drag-active');
+        return;
+      }
+      e.preventDefault();
+      updateDrag(e.clientY);
+    });
+
+    handle.addEventListener('pointerup', e => {
+      clearTimeout(longPressTimer);
+      if (dragState && dragState.card === card) {
+        endDrag();
+      }
+    });
+
+    handle.addEventListener('pointercancel', () => {
+      clearTimeout(longPressTimer);
+      if (dragState && dragState.card === card) {
+        const c = dragState.card;
+        c.classList.remove('touch-lifted');
+        c.style.transform = '';
+        c.style.position = '';
+        c.style.zIndex = '';
+        document.querySelectorAll('.book-card').forEach(cc => {
+          cc.style.transition = '';
+          cc.style.transform = '';
         });
-        if (targetCard && targetCard !== touchDragEl) {
-          targetCard.classList.add('drag-active');
-        }
-      }, { passive: false });
-
-      handle.addEventListener('touchend', e => {
-        clearTimeout(longPressTimer);
-        if (!touchDragEl) return;
-        const touch = e.changedTouches[0];
-        const elUnder = document.elementFromPoint(touch.clientX, touch.clientY);
-        const targetCard = elUnder ? elUnder.closest('.book-card') : null;
-        touchDragEl.classList.remove('drag-active');
-        if (targetCard) targetCard.classList.remove('drag-active');
-        if (targetCard && targetCard !== touchDragEl) {
-          reorderBooks(touchDragEl.dataset.id, targetCard.dataset.id);
-        }
-        touchDragEl = null;
-      });
-
-      handle.addEventListener('touchcancel', () => {
-        clearTimeout(longPressTimer);
-        if (touchDragEl) touchDragEl.classList.remove('drag-active');
-        touchDragEl = null;
-      });
-    }
+        dragState = null;
+      }
+    });
   });
 }
 
