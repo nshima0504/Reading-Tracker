@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>閱讀進度</title>
+<style>
+  :root {
+    --radius-lg: 22px;
+    --radius-md: 14px;
+    --radius-sm: 10px;
+    --accent: #0A84FF;
+    --accent-soft: rgba(10, 132, 255, 0.16);
+    --transition: 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
+  }
+
+  /* Light mode tokens */
+  :root,
+  [data-theme="light"] {
+    --bg-gradient: linear-gradient(135deg, #eef1f6 0%, #dfe6f0 50%, #e9eef5 100%);
+    --glass-bg: rgba(255, 255, 255, 0.55);
+    --glass-bg-strong: rgba(255, 255, 255, 0.72);
+    --glass-border: rgba(255, 255, 255, 0.6);
+    --text-primary: #1c1c1e;
+    --text-secondary: rgba(60, 60, 67, 0.6);
+    --text-tertiary: rgba(60, 60, 67, 0.35);
+    --shadow-color: rgba(31, 38, 135, 0.12);
+    --progress-track: rgba(120, 120, 128, 0.16);
+    --input-bg: rgba(255, 255, 255, 0.6);
+    --input-border: rgba(0, 0, 0, 0.08);
+    --danger: #FF3B30;
+  }
+
+  /* Dark mode tokens */
+  [data-theme="dark"] {
+    --bg-gradient: linear-gradient(135deg, #2c2c2e 0%, #1c1c1e 50%, #242426 100%);
+    --glass-bg: rgba(58, 58, 60, 0.55);
+    --glass-bg-strong: rgba(68, 68, 70, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.12);
+    --text-primary: #f5f5f7;
+    --text-secondary: rgba(235, 235, 245, 0.6);
+    --text-tertiary: rgba(235, 235, 245, 0.35);
+    --shadow-color: rgba(0, 0, 0, 0.4);
+    --progress-track: rgba(120, 120, 128, 0.32);
+    --input-bg: rgba(255, 255, 255, 0.06);
+    --input-border: rgba(255, 255, 255, 0.12);
+    --danger: #FF453A;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg-gradient: linear-gradient(135deg, #2c2c2e 0%, #1c1c1e 50%, #242426 100%);
+      --glass-bg: rgba(58, 58, 60, 0.55);
+      --glass-bg-strong: rgba(68, 68, 70, 0.7);
+      --glass-border: rgba(255, 255, 255, 0.12);
+      --text-primary: #f5f5f7;
+      --text-secondary: rgba(235, 235, 245, 0.6);
+      --text-tertiary: rgba(235, 235, 245, 0.35);
+      --shadow-color: rgba(0, 0, 0, 0.4);
+      --progress-track: rgba(120, 120, 128, 0.32);
+      --input-bg: rgba(255, 255, 255, 0.06);
+      --input-border: rgba(255, 255, 255, 0.12);
+      --danger: #FF453A;
+    }
+  }
+
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    min-height: 100%;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang TC", "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg-gradient);
+    color: var(--text-primary);
+    min-height: 100vh;
+    transition: background var(--transition), color var(--transition);
+    padding: 24px 16px 80px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .container {
+    max-width: 640px;
+    margin: 0 auto;
+  }
+
+  /* Top bar */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    padding: 4px 6px;
+  }
+
+  .topbar h1 {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    margin: 0;
+  }
+
+  .theme-toggle {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 16px var(--shadow-color);
+    transition: transform 0.2s ease, background var(--transition);
+    flex-shrink: 0;
+  }
+
+  .theme-toggle:active {
+    transform: scale(0.92);
+  }
+
+  .theme-toggle svg {
+    width: 20px;
+    height: 20px;
+    stroke: var(--text-primary);
+    fill: none;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .icon-sun { display: none; }
+  [data-theme="dark"] .icon-moon { display: none; }
+  [data-theme="dark"] .icon-sun { display: block; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .icon-moon { display: none; }
+    :root:not([data-theme="light"]) .icon-sun { display: block; }
+  }
+
+  /* Glass card base */
+  .glass-card {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    box-shadow: 0 8px 32px var(--shadow-color), inset 0 1px 0 rgba(255,255,255,0.15);
+    transition: background var(--transition), border-color var(--transition), box-shadow var(--transition);
+  }
+
+  /* Book cards */
+  #books-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .book-card {
+    padding: 14px;
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    position: relative;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+    touch-action: pan-y;
+  }
+
+  .book-card.dragging {
+    opacity: 0.5;
+  }
+
+  .book-card.drag-active {
+    box-shadow: 0 16px 40px var(--shadow-color);
+    transform: scale(1.02);
+    z-index: 10;
+  }
+
+  .drag-placeholder {
+    border-radius: var(--radius-lg);
+    border: 1.5px dashed var(--glass-border);
+    background: transparent;
+  }
+
+  .drag-handle {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    flex-shrink: 0;
+    cursor: grab;
+    color: var(--text-tertiary);
+    align-self: stretch;
+    touch-action: none;
+  }
+
+  .drag-handle:active {
+    cursor: grabbing;
+  }
+
+  .drag-handle svg {
+    width: 18px;
+    height: 18px;
+    stroke: var(--text-tertiary);
+    fill: none;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+  }
+
+  .book-cover-wrap {
+    position: relative;
+    width: 84px;
+    height: 116px;
+    flex-shrink: 0;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+
+  .book-cover {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    border-radius: var(--radius-md);
+  }
+
+  .book-cover-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-radius: var(--radius-md);
+  }
+
+  .book-cover-placeholder svg {
+    width: 28px;
+    height: 28px;
+    stroke: var(--accent);
+    fill: none;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .cover-upload-label {
+    position: absolute;
+    bottom: 6px;
+    right: 6px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.45);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.3);
+    transition: background 0.2s ease;
+  }
+
+  .cover-upload-label:active {
+    transform: scale(0.92);
+  }
+
+  .cover-upload-label svg {
+    width: 14px;
+    height: 14px;
+    stroke: #fff;
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .cover-upload-input {
+    display: none;
+  }
+
+  .book-body {
+    flex: 1;
+    min-width: 0;
+    padding: 0;
+  }
+
+  .book-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .book-title-input {
+    font-size: 17px;
+    font-weight: 600;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    width: 100%;
+    padding: 4px 0;
+    letter-spacing: -0.2px;
+  }
+
+  .book-title-input:focus {
+    outline: none;
+  }
+
+  .delete-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.2s ease;
+  }
+
+  .delete-btn:hover {
+    background: rgba(255, 59, 48, 0.12);
+  }
+
+  .delete-btn:active {
+    transform: scale(0.9);
+  }
+
+  .delete-btn svg {
+    width: 17px;
+    height: 17px;
+    stroke: var(--danger);
+    fill: none;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .progress-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .progress-track {
+    flex: 1;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--progress-track);
+    overflow: hidden;
+    position: relative;
+  }
+
+  .progress-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #0A84FF, #5AC8FA);
+    transition: width 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+  }
+
+  .progress-text {
+    font-size: 13px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    min-width: 78px;
+    text-align: right;
+    font-weight: 500;
+  }
+
+  .number-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .number-input {
+    width: 64px;
+    text-align: center;
+    font-size: 15px;
+    font-weight: 600;
+    padding: 8px 6px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--input-border);
+    background: var(--input-bg);
+    color: var(--text-primary);
+    -webkit-appearance: none;
+    appearance: textfield;
+  }
+
+  .number-input::-webkit-outer-spin-button,
+  .number-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  .number-input:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+  }
+
+  .slash {
+    color: var(--text-tertiary);
+    font-weight: 500;
+  }
+
+  .note-input {
+    width: 100%;
+    font-size: 14px;
+    line-height: 1.5;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--input-border);
+    background: var(--input-bg);
+    color: var(--text-primary);
+    resize: none;
+    height: 64px;
+    overflow-y: auto;
+    font-family: inherit;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .note-input::placeholder {
+    color: var(--text-tertiary);
+  }
+
+  .note-input:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+  }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--text-tertiary);
+    font-size: 15px;
+  }
+
+  .empty-state svg {
+    width: 40px;
+    height: 40px;
+    stroke: var(--text-tertiary);
+    fill: none;
+    stroke-width: 1.5;
+    margin-bottom: 12px;
+  }
+
+  /* Add form */
+  .add-card {
+    padding: 18px;
+  }
+
+  .add-card h2 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0 0 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-primary);
+  }
+
+  .add-card h2 svg {
+    width: 18px;
+    height: 18px;
+    stroke: var(--accent);
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .add-cover-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .add-cover-preview {
+    width: 60px;
+    height: 60px;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    flex-shrink: 0;
+    background: var(--accent-soft);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--input-border);
+  }
+
+  .add-cover-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .add-cover-preview svg {
+    width: 24px;
+    height: 24px;
+    stroke: var(--accent);
+    fill: none;
+    stroke-width: 1.6;
+  }
+
+  .cover-pick-btn {
+    flex: 1;
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--input-border);
+    background: var(--input-bg);
+    color: var(--text-secondary);
+    font-size: 14px;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .text-input {
+    width: 100%;
+    font-size: 15px;
+    padding: 11px 13px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--input-border);
+    background: var(--input-bg);
+    color: var(--text-primary);
+    margin-bottom: 10px;
+  }
+
+  .text-input::placeholder {
+    color: var(--text-tertiary);
+  }
+
+  .text-input:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+  }
+
+  .add-numbers-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .add-numbers-row .text-input {
+    margin-bottom: 0;
+  }
+
+  .add-btn {
+    width: 100%;
+    padding: 13px;
+    border-radius: var(--radius-sm);
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: opacity 0.2s ease, transform 0.1s ease;
+    box-shadow: 0 6px 18px rgba(10, 132, 255, 0.35);
+  }
+
+  .add-btn:active {
+    transform: scale(0.98);
+    opacity: 0.85;
+  }
+
+  .add-btn svg {
+    width: 18px;
+    height: 18px;
+    stroke: #fff;
+    fill: none;
+    stroke-width: 2.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .footer-note {
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-tertiary);
+    margin-top: 20px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="topbar">
+    <h1>閱讀進度</h1>
+    <button class="theme-toggle" id="theme-toggle" aria-label="切換深淺色模式">
+      <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66 4.93 19.07M19.07 4.93 17.66 6.34"/></svg>
+    </button>
+  </div>
+
+  <div id="books-list"></div>
+
+  <div class="glass-card add-card">
+    <h2>
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
+      新增一本書
+    </h2>
+
+    <div class="add-cover-row">
+      <div class="add-cover-preview" id="add-cover-preview">
+        <svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>
+      </div>
+      <label class="cover-pick-btn" for="new-cover-input" id="add-cover-label">選擇封面圖片（選填）</label>
+      <input type="file" accept="image/*" id="new-cover-input" class="cover-upload-input" />
+    </div>
+
+    <input type="text" id="new-name" class="text-input" placeholder="書名" />
+
+    <div class="add-numbers-row">
+      <input type="number" id="new-current" class="text-input" placeholder="目前進度" min="0" />
+      <input type="number" id="new-total" class="text-input" placeholder="總數" min="1" />
+    </div>
+
+    <input type="text" id="new-note" class="text-input" placeholder="備註（選填）" style="margin-bottom: 14px;" />
+
+    <button class="add-btn" id="add-book-btn">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
+      新增
+    </button>
+  </div>
+
+  <div class="footer-note">資料會儲存在這個瀏覽器裡</div>
+
+</div>
+
+<script>
+const STORAGE_KEY = 'reading-progress-data';
+const THEME_KEY = 'reading-progress-theme';
+
+let books = [];
+
+function genId() {
+  return 'b' + Date.now() + Math.floor(Math.random() * 1000);
+}
+
+function loadBooks() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    books = raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    books = [];
+  }
+}
+
+function saveBooks() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(books));
+  } catch (e) {
+    console.error('Storage error', e);
+  }
+}
+
+function applyTheme(theme) {
+  if (theme === 'light' || theme === 'dark') {
+    document.documentElement.setAttribute('data-theme', theme);
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+  }
+}
+
+function loadTheme() {
+  const saved = localStorage.getItem(THEME_KEY);
+  applyTheme(saved);
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const currentlyDark = current === 'dark' || (!current && prefersDark);
+  const next = currentlyDark ? 'light' : 'dark';
+  applyTheme(next);
+  localStorage.setItem(THEME_KEY, next);
+}
+
+const placeholderSVG = `<div class="book-cover-placeholder"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>`;
+
+function bookCardHTML(b) {
+  const total = b.total > 0 ? b.total : 1;
+  const pct = Math.min(100, Math.max(0, Math.round((b.current / total) * 100)));
+  const coverInner = b.cover
+    ? `<img class="book-cover" src="${b.cover}" alt="${b.name} 封面" />`
+    : placeholderSVG;
+
+  return `
+    <div class="glass-card book-card" data-id="${b.id}" draggable="true">
+      <div class="drag-handle" aria-label="拖曳排序">
+        <svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.2"/><circle cx="15" cy="6" r="1.2"/><circle cx="9" cy="12" r="1.2"/><circle cx="15" cy="12" r="1.2"/><circle cx="9" cy="18" r="1.2"/><circle cx="15" cy="18" r="1.2"/></svg>
+      </div>
+      <div class="book-cover-wrap">
+        ${coverInner}
+        <label class="cover-upload-label" for="cover-input-${b.id}" aria-label="上傳封面">
+          <svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>
+        </label>
+        <input type="file" accept="image/*" id="cover-input-${b.id}" class="cover-upload-input cover-input" data-id="${b.id}" />
+      </div>
+      <div class="book-body">
+        <div class="book-header">
+          <input type="text" class="book-title-input title-input" data-id="${b.id}" value="${escapeAttr(b.name)}" placeholder="書名" />
+          <button class="delete-btn" data-id="${b.id}" aria-label="刪除">
+            <svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0-1 14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1L4 6h16z"/></svg>
+          </button>
+        </div>
+        <div class="progress-row">
+          <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+          <span class="progress-text">${pct}%</span>
+        </div>
+        <div class="number-row">
+          <input type="number" class="number-input current-input" data-id="${b.id}" value="${b.current}" min="0" />
+          <span class="slash">/</span>
+          <input type="number" class="number-input total-input" data-id="${b.id}" value="${b.total}" min="1" />
+        </div>
+        <textarea class="note-input note-textarea" data-id="${b.id}" placeholder="備註...">${escapeHTML(b.note || '')}</textarea>
+      </div>
+    </div>
+  `;
+}
+
+function escapeAttr(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function escapeHTML(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function render() {
+  const el = document.getElementById('books-list');
+  if (books.length === 0) {
+    el.innerHTML = `
+      <div class="glass-card empty-state">
+        <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        <div>還沒有書籍，從下面新增一本吧</div>
+      </div>`;
+    return;
+  }
+  el.innerHTML = books.map(bookCardHTML).join('');
+  bindCardEvents();
+}
+
+function bindCardEvents() {
+  document.querySelectorAll('.title-input').forEach(inp => {
+    inp.addEventListener('change', e => {
+      const b = books.find(x => x.id === e.target.dataset.id);
+      b.name = e.target.value.trim() || '未命名';
+      saveBooks();
+    });
+  });
+
+  document.querySelectorAll('.current-input').forEach(inp => {
+    inp.addEventListener('change', e => {
+      const b = books.find(x => x.id === e.target.dataset.id);
+      let val = parseInt(e.target.value, 10);
+      if (isNaN(val) || val < 0) val = 0;
+      b.current = val;
+      saveBooks();
+      render();
+    });
+  });
+
+  document.querySelectorAll('.total-input').forEach(inp => {
+    inp.addEventListener('change', e => {
+      const b = books.find(x => x.id === e.target.dataset.id);
+      let val = parseInt(e.target.value, 10);
+      if (isNaN(val) || val < 1) val = 1;
+      b.total = val;
+      saveBooks();
+      render();
+    });
+  });
+
+  document.querySelectorAll('.note-textarea').forEach(inp => {
+    inp.addEventListener('change', e => {
+      const b = books.find(x => x.id === e.target.dataset.id);
+      b.note = e.target.value;
+      saveBooks();
+    });
+  });
+
+  document.querySelectorAll('.delete-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const id = e.currentTarget.dataset.id;
+      books = books.filter(b => b.id !== id);
+      saveBooks();
+      render();
+    });
+  });
+
+  document.querySelectorAll('.cover-input').forEach(inp => {
+    inp.addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const id = e.target.dataset.id;
+      readImageAsDataURL(file, dataURL => {
+        const b = books.find(x => x.id === id);
+        b.cover = dataURL;
+        saveBooks();
+        render();
+      });
+    });
+  });
+
+  bindDragEvents();
+}
+
+function readImageAsDataURL(file, callback) {
+  const reader = new FileReader();
+  reader.onload = () => callback(reader.result);
+  reader.readAsDataURL(file);
+}
+
+// ---- Drag to reorder ----
+let dragSrcId = null;
+let touchDragEl = null;
+let touchDragGhostY = 0;
+let longPressTimer = null;
+const LONG_PRESS_MS = 350;
+
+function reorderBooks(srcId, targetId) {
+  if (srcId === targetId) return;
+  const srcIndex = books.findIndex(b => b.id === srcId);
+  const targetIndex = books.findIndex(b => b.id === targetId);
+  if (srcIndex === -1 || targetIndex === -1) return;
+  const [moved] = books.splice(srcIndex, 1);
+  books.splice(targetIndex, 0, moved);
+  saveBooks();
+  render();
+}
+
+function bindDragEvents() {
+  const cards = document.querySelectorAll('.book-card');
+
+  cards.forEach(card => {
+    const id = card.dataset.id;
+
+    // Desktop HTML5 drag (initiated from handle)
+    card.addEventListener('dragstart', e => {
+      dragSrcId = id;
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+
+    card.addEventListener('dragend', () => {
+      card.classList.remove('dragging');
+      document.querySelectorAll('.book-card').forEach(c => c.classList.remove('drag-active'));
+      dragSrcId = null;
+    });
+
+    card.addEventListener('dragover', e => {
+      e.preventDefault();
+      if (dragSrcId && dragSrcId !== id) {
+        card.classList.add('drag-active');
+      }
+    });
+
+    card.addEventListener('dragleave', () => {
+      card.classList.remove('drag-active');
+    });
+
+    card.addEventListener('drop', e => {
+      e.preventDefault();
+      card.classList.remove('drag-active');
+      if (dragSrcId) {
+        reorderBooks(dragSrcId, id);
+      }
+    });
+
+    // Mobile/touch long-press drag (initiated from handle)
+    const handle = card.querySelector('.drag-handle');
+    if (handle) {
+      handle.addEventListener('touchstart', e => {
+        const targetCard = card;
+        longPressTimer = setTimeout(() => {
+          touchDragEl = targetCard;
+          targetCard.classList.add('drag-active');
+          if (navigator.vibrate) navigator.vibrate(10);
+        }, LONG_PRESS_MS);
+      }, { passive: true });
+
+      handle.addEventListener('touchmove', e => {
+        if (!touchDragEl) {
+          clearTimeout(longPressTimer);
+          return;
+        }
+        e.preventDefault();
+        const touch = e.touches[0];
+        const elUnder = document.elementFromPoint(touch.clientX, touch.clientY);
+        const targetCard = elUnder ? elUnder.closest('.book-card') : null;
+        document.querySelectorAll('.book-card').forEach(c => {
+          if (c !== touchDragEl) c.classList.remove('drag-active');
+        });
+        if (targetCard && targetCard !== touchDragEl) {
+          targetCard.classList.add('drag-active');
+        }
+      }, { passive: false });
+
+      handle.addEventListener('touchend', e => {
+        clearTimeout(longPressTimer);
+        if (!touchDragEl) return;
+        const touch = e.changedTouches[0];
+        const elUnder = document.elementFromPoint(touch.clientX, touch.clientY);
+        const targetCard = elUnder ? elUnder.closest('.book-card') : null;
+        touchDragEl.classList.remove('drag-active');
+        if (targetCard) targetCard.classList.remove('drag-active');
+        if (targetCard && targetCard !== touchDragEl) {
+          reorderBooks(touchDragEl.dataset.id, targetCard.dataset.id);
+        }
+        touchDragEl = null;
+      });
+
+      handle.addEventListener('touchcancel', () => {
+        clearTimeout(longPressTimer);
+        if (touchDragEl) touchDragEl.classList.remove('drag-active');
+        touchDragEl = null;
+      });
+    }
+  });
+}
+
+// Add form
+let pendingCover = null;
+
+document.getElementById('new-cover-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  readImageAsDataURL(file, dataURL => {
+    pendingCover = dataURL;
+    const preview = document.getElementById('add-cover-preview');
+    preview.innerHTML = `<img src="${dataURL}" alt="封面預覽" />`;
+    document.getElementById('add-cover-label').textContent = '已選擇圖片，點此更換';
+  });
+});
+
+document.getElementById('add-book-btn').addEventListener('click', () => {
+  const nameInp = document.getElementById('new-name');
+  const currentInp = document.getElementById('new-current');
+  const totalInp = document.getElementById('new-total');
+  const noteInp = document.getElementById('new-note');
+
+  const name = nameInp.value.trim();
+  if (!name) {
+    nameInp.focus();
+    return;
+  }
+
+  let current = parseInt(currentInp.value, 10);
+  let total = parseInt(totalInp.value, 10);
+  if (isNaN(current) || current < 0) current = 0;
+  if (isNaN(total) || total < 1) total = 1;
+
+  books.push({
+    id: genId(),
+    name,
+    current,
+    total,
+    note: noteInp.value.trim(),
+    cover: pendingCover
+  });
+  saveBooks();
+  render();
+
+  nameInp.value = '';
+  currentInp.value = '';
+  totalInp.value = '';
+  noteInp.value = '';
+  pendingCover = null;
+  document.getElementById('add-cover-preview').innerHTML = `<svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>`;
+  document.getElementById('add-cover-label').textContent = '選擇封面圖片（選填）';
+  document.getElementById('new-cover-input').value = '';
+});
+
+document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+
+loadTheme();
+loadBooks();
+render();
+</script>
+</body>
+</html>
